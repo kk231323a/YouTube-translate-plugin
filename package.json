@@ -1,0 +1,10 @@
+{
+  "name": "youtube-cn-subtitles",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check background-v2.js && node --check content-v2.js && node --check youtube-caption-bridge.js && node --check popup-v2.js && node --check offscreen.js",
+    "verify": "pnpm run check"
+  }
+}

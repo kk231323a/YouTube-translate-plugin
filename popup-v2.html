@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube 中文字幕助手</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f7f6f3;
+      --surface: #ffffff;
+      --ink: #171715;
+      --muted: #77756f;
+      --line: #e6e3dc;
+      --soft: #efede8;
+      --accent: #9f2f2d;
+      --accent-soft: #fdebec;
+      --success: #346538;
+      --success-soft: #edf3ec;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 344px;
+      margin: 0;
+      padding: 18px;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: "HarmonyOS Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 16px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .brand-mark svg {
+      width: 21px;
+      height: 21px;
+      color: var(--ink);
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Source Han Serif SC", "Songti SC", serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      margin-bottom: 10px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: #aaa69d;
+    }
+
+    .status-line.is-active {
+      border-color: #d7e3d5;
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .status-line.is-active .status-dot {
+      background: var(--success);
+    }
+
+    .settings {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .row {
+      display: flex;
+      min-height: 46px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+    }
+
+    .row-label {
+      color: #373631;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .row-value {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .range-value {
+      width: 34px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+      font-size: 10px;
+      text-align: right;
+    }
+
+    select {
+      max-width: 128px;
+      padding: 5px 24px 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      outline: none;
+      background: var(--canvas);
+      color: var(--ink);
+      font: inherit;
+      font-size: 11px;
+    }
+
+    select:focus {
+      border-color: #9e9a90;
+    }
+
+    input[type="range"] {
+      width: 104px;
+      accent-color: var(--ink);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+    }
+
+    .switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      cursor: pointer;
+      border-radius: 11px;
+      background: #c9c5bc;
+      transition: background 160ms ease;
+    }
+
+    .slider::before {
+      position: absolute;
+      bottom: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+      content: "";
+      transition: transform 160ms ease;
+    }
+
+    .switch input:checked + .slider {
+      background: var(--ink);
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(16px);
+    }
+
+    .switch input:focus-visible + .slider {
+      outline: 2px solid #9e9a90;
+      outline-offset: 2px;
+    }
+
+    .asr-section {
+      margin-top: 12px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .asr-copy {
+      margin: 0 0 11px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .asr-copy strong {
+      color: #3a3934;
+      font-weight: 600;
+    }
+
+    .asr-meta {
+      display: flex;
+      min-height: 17px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .progress {
+      width: 100%;
+      height: 3px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      border-radius: 2px;
+      background: var(--soft);
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--ink);
+      transition: width 180ms ease;
+    }
+
+    .primary-button {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--ink);
+      border-radius: 6px;
+      background: var(--ink);
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+
+    .primary-button:hover:not(:disabled) {
+      background: #33322f;
+    }
+
+    .primary-button:active:not(:disabled) {
+      transform: scale(0.985);
+    }
+
+    .primary-button.is-running {
+      border-color: #d8b9b8;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .primary-button:disabled {
+      border-color: var(--line);
+      background: var(--soft);
+      color: #a7a39a;
+      cursor: not-allowed;
+    }
+
+    footer {
+      margin-top: 11px;
+      color: #929087;
+      font-size: 9px;
+      line-height: 1.45;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+        <path d="M7 11.5h10M8.5 14.5h7"></path>
+      </svg>
+    </div>
+    <div>
+      <h1>YouTube 中文字幕助手</h1>
+      <p class="subtitle">原字幕翻译与无字幕语音识别</p>
+    </div>
+  </header>
+
+  <div id="pageStatus" class="status-line">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span id="pageStatusText">正在读取当前页面</span>
+  </div>
+
+  <section class="settings" aria-label="字幕设置">
+    <div class="row">
+      <label class="row-label" for="enabled">启用字幕助手</label>
+      <label class="switch">
+        <input id="enabled" type="checkbox" checked>
+        <span class="slider" aria-hidden="true"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <label class="row-label" for="targetLang">目标语言</label>
+      <select id="targetLang">
+        <option value="zh-CN">简体中文</option>
+        <option value="zh-TW">繁体中文</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label class="row-label" for="fontSize">字幕大小</label>
+      <div class="row-value">
+        <input id="fontSize" type="range" min="14" max="28" step="1" value="18">
+        <span id="fontSizeValue" class="range-value">18px</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <label class="row-label" for="bgOpacity">背景浓度</label>
+      <div class="row-value">
+        <input id="bgOpacity" type="range" min="50" max="95" step="5" value="85">
+        <span id="bgOpacityValue" class="range-value">85%</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="asr-section" aria-labelledby="asrTitle">
+    <p class="asr-copy">
+      <strong id="asrTitle">没有字幕的英文视频</strong><br>
+      首次使用会下载翻译和语音模型。语音识别在本机完成，不上传音频。
+    </p>
+    <div class="asr-meta">
+      <span id="asrStatus">语音识别未启动</span>
+      <span id="asrDetail"></span>
+    </div>
+    <div class="progress" aria-hidden="true">
+      <div id="asrProgress" class="progress-bar"></div>
+    </div>
+    <button id="asrButton" class="primary-button" type="button" disabled>
+      开始本地语音识别
+    </button>
+  </section>
+
+  <footer>翻译由 Google 翻译提供。仅在 YouTube 视频页生效。</footer>
+
+  <script src="popup-v2.js"></script>
+</body>
+</html>

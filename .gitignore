@@ -1,0 +1,13 @@
+node_modules/
+.playwright-cli/
+*.zip
+outputs/
+work/
+
+# Legacy files replaced by the v1 implementation.
+background.js
+content.js
+content.css
+popup.html
+popup.js
+scripts/
