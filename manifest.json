@@ -1,10 +1,10 @@
 ﻿{
   "manifest_version": 3,
   "name": "YouTube 中文字幕助手",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minimum_chrome_version": "138",
   "description": "优先使用原字幕并翻译成中文；完全没有字幕时可用本地语音识别生成中文字幕。",
-  "permissions": ["storage", "tabCapture", "offscreen", "activeTab"],
+  "permissions": ["storage", "tabCapture", "offscreen", "activeTab", "scripting"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://translate.googleapis.com/*",

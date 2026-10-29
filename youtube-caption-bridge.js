@@ -1,5 +1,10 @@
 // Main-world bridge: observe the caption responses fetched by YouTube itself.
 (() => {
+  if (document.documentElement.dataset.ytCnBridgeVersion === '1.1.1') {
+    return;
+  }
+  document.documentElement.dataset.ytCnBridgeVersion = '1.1.1';
+
   const BRIDGE_SOURCE = 'yt-cn-caption-bridge';
   const CONTENT_SOURCE = 'yt-cn-content';
   const originalFetch = window.fetch;

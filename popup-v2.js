@@ -56,6 +56,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
+      await chrome.runtime.sendMessage({
+        target: 'background',
+        type: 'content:ensure',
+        tabId: activeTab.id
+      });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    } catch {
+      // The page may not be ready yet; the normal content script still applies.
+    }
+
+    try {
       contentStatus = await chrome.tabs.sendMessage(activeTab.id, {
         action: 'getStatus'
       });

@@ -22,6 +22,12 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (Object.keys(missing).length) {
     await chrome.storage.local.set(missing);
   }
+
+  await injectIntoOpenYouTubeTabs();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  injectIntoOpenYouTubeTabs();
 });
 
 async function hasOffscreenDocument() {
@@ -68,6 +74,37 @@ async function sendToTab(tabId, message) {
   } catch {
     // The page may have navigated or been closed.
   }
+}
+
+async function ensureContentScripts(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['youtube-caption-bridge.js'],
+    world: 'MAIN',
+    injectImmediately: true
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content-v2.js'],
+    world: 'ISOLATED',
+    injectImmediately: true
+  });
+  await chrome.scripting.insertCSS({
+    target: { tabId },
+    files: ['content-v2.css']
+  });
+
+  return { ok: true };
+}
+
+async function injectIntoOpenYouTubeTabs() {
+  const tabs = await chrome.tabs.query({
+    url: ['https://www.youtube.com/*']
+  });
+
+  await Promise.allSettled(
+    tabs.map((tab) => (tab.id ? ensureContentScripts(tab.id) : null))
+  );
 }
 
 async function translateText(text, targetLang) {
@@ -155,6 +192,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       switch (message.type) {
+        case 'content:ensure':
+          sendResponse(await ensureContentScripts(message.tabId));
+          break;
         case 'translate:request': {
           try {
             const translated = await translateText(

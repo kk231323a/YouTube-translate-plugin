@@ -2,6 +2,17 @@
 'use strict';
 
 (() => {
+  const contentVersion = chrome.runtime.getManifest().version;
+  const contentMarker = `__ytCnSubtitleContentLoaded_${contentVersion}`;
+  if (
+    document.documentElement.dataset.ytCnContentVersion === contentVersion ||
+    window[contentMarker]
+  ) {
+    return;
+  }
+  document.documentElement.dataset.ytCnContentVersion = contentVersion;
+  window[contentMarker] = true;
+
   const DEFAULTS = {
     enabled: true,
     targetLang: 'zh-CN',
@@ -42,6 +53,9 @@
   let navigationObserver = null;
   let nativeCaptionObserver = null;
   let nativeCaptionTimer = null;
+  let nativeCaptionPollInterval = null;
+  let nativeCaptionRefreshAttempted = false;
+  let chineseTrackRequested = false;
   let videoListenersAttached = false;
 
   const translationCache = new Map();
@@ -155,6 +169,10 @@
       clearTimeout(nativeCaptionTimer);
       nativeCaptionTimer = null;
     }
+    if (nativeCaptionPollInterval) {
+      clearInterval(nativeCaptionPollInterval);
+      nativeCaptionPollInterval = null;
+    }
     if (nativeCaptionObserver) {
       nativeCaptionObserver.disconnect();
       nativeCaptionObserver = null;
@@ -182,6 +200,8 @@
     prefetchGeneration += 1;
     bridgedTracks.clear();
     bridgeTrackOrder = 0;
+    nativeCaptionRefreshAttempted = false;
+    chineseTrackRequested = false;
     asrAnchor = null;
     asrState = 'idle';
   }
@@ -207,6 +227,7 @@
   }
 
   function createPanel() {
+    document.getElementById('yt-cn-subtitle-panel')?.remove();
     panelEl = document.createElement('div');
     panelEl.id = 'yt-cn-subtitle-panel';
     panelEl.setAttribute('aria-live', 'polite');
@@ -287,6 +308,8 @@
     bridgedTracks.clear();
     bridgeTrackOrder = 0;
     lastPrefetchCheck = 0;
+    nativeCaptionRefreshAttempted = false;
+    chineseTrackRequested = false;
     asrAnchor = null;
 
     textEl.textContent = '正在获取字幕';
@@ -347,7 +370,7 @@
       }
 
       const captionsEnabled = enableYoutubeCaptions();
-      requestBridgeCaptions();
+      activateNativeCaptionFallback();
 
       if (!captionsEnabled) {
         showNoCaptionsMessage(
@@ -412,7 +435,7 @@
 
       const rankedTracks = rankCaptionTracks(tracks, playerData);
 
-      for (const track of rankedTracks.slice(0, 5)) {
+      for (const track of rankedTracks.slice(0, 1)) {
         try {
           const sourceData = await fetchTimedText(track.baseUrl);
           const parsed = parseTimedText(sourceData);
@@ -444,7 +467,7 @@
     const response = await fetchWithTimeout(
       `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
       { credentials: 'include', cache: 'no-store' },
-      12000
+      8000
     );
     if (!response.ok) return null;
 
@@ -591,7 +614,7 @@
     const response = await fetchWithTimeout(
       url.toString(),
       { credentials: 'include', cache: 'no-store' },
-      12000
+      3500
     );
     if (!response.ok) throw new Error(`字幕请求失败: ${response.status}`);
     return response.json();
@@ -848,6 +871,33 @@
       }
 
       const key = `${sourceLanguage}:${targetLanguage}`;
+      const availability = await globalThis.Translator.availability({
+        sourceLanguage,
+        targetLanguage
+      });
+
+      if (availability !== 'available') {
+        if (
+          availability === 'downloadable' ||
+          availability === 'downloading'
+        ) {
+          if (!localTranslators.has(key)) {
+            const download = createChromeTranslator(
+              sourceLanguage,
+              targetLanguage,
+              true
+            ).catch((error) => {
+              console.debug('[YT-CN] 翻译模型预下载失败:', error);
+              return null;
+            });
+            localTranslators.set(key, download);
+          }
+        }
+
+        // Do not block visible subtitles while the language pack downloads.
+        return { ok: false, text, downloading: true };
+      }
+
       let translatorPromise = localTranslators.get(key);
 
       if (!translatorPromise) {
@@ -874,7 +924,11 @@
     }
   }
 
-  async function createChromeTranslator(sourceLanguage, targetLanguage) {
+  async function createChromeTranslator(
+    sourceLanguage,
+    targetLanguage,
+    backgroundDownload = false
+  ) {
     const availability = await globalThis.Translator.availability({
       sourceLanguage,
       targetLanguage
@@ -891,9 +945,13 @@
             const percentage = event.total
               ? Math.round((event.loaded / event.total) * 100)
               : null;
-            setStatus(
-              percentage === null ? '下载翻译模型' : `翻译模型 ${percentage}%`
-            );
+            if (!backgroundDownload) {
+              setStatus(
+                percentage === null ? '下载翻译模型' : `翻译模型 ${percentage}%`
+              );
+            } else if (percentage !== null && percentage % 10 === 0) {
+              console.debug(`[YT-CN] 中文翻译模型 ${percentage}%`);
+            }
           });
         }
       });
@@ -1118,6 +1176,47 @@
     setSubtitle(text);
   }
 
+  function activateNativeCaptionFallback() {
+    requestBridgeCaptions();
+
+    if (!nativeCaptionRefreshAttempted) {
+      nativeCaptionRefreshAttempted = true;
+      const button = document.querySelector('.ytp-subtitles-button');
+
+      if (button?.getAttribute('aria-pressed') === 'true') {
+        button.click();
+        setTimeout(() => {
+          if (
+            enabled &&
+            captionMode !== 'track' &&
+            captionMode !== 'asr'
+          ) {
+            button.click();
+          }
+        }, 260);
+      }
+    }
+
+    if (nativeCaptionPollInterval) {
+      clearInterval(nativeCaptionPollInterval);
+    }
+
+    let attempts = 0;
+    nativeCaptionPollInterval = setInterval(() => {
+      attempts += 1;
+      readNativeCaption();
+
+      if (
+        attempts >= 20 ||
+        captionMode === 'track' ||
+        captionMode === 'asr'
+      ) {
+        clearInterval(nativeCaptionPollInterval);
+        nativeCaptionPollInterval = null;
+      }
+    }, 500);
+  }
+
   function enableYoutubeCaptions() {
     const button = document.querySelector('.ytp-subtitles-button');
     if (
@@ -1145,6 +1244,8 @@
   }
 
   function requestBridgeChineseCaptions() {
+    if (chineseTrackRequested) return;
+    chineseTrackRequested = true;
     window.postMessage(
       {
         source: CONTENT_SOURCE,
@@ -1249,6 +1350,12 @@
     lastPrefetchCheck = 0;
     textEl.textContent = '';
     setStatus('字幕就绪');
+    if (
+      !isChineseLanguage(track.language) &&
+      !isMostlyChinese(track.captions[0]?.text || '')
+    ) {
+      requestBridgeChineseCaptions();
+    }
     ensureTranslationPrefetchWindow(true);
     onTimeUpdate();
   }
